@@ -1,0 +1,12 @@
+# Ignore node_modules in all folders
+node_modules/
+*/node_modules/
+
+# Ignore .env files in specific folders
+server/.env
+client/.env
+.env
+
+# Mac/Windows system files
+.DS_Store
+Thumbs.db
