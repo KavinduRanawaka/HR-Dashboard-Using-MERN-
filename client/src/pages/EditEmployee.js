@@ -55,7 +55,7 @@ const EditEmployee = () => {
     }
 
     try {
-      await axios.put(`http://localhost:5000/api/employees/${id}`, formData);
+      await axios.put(`https://hr-dashboard-using-mern.onrender.com/api/employees/${id}`, formData);
       navigate('/'); 
     } catch (err) {
       setError("Error updating employee.");

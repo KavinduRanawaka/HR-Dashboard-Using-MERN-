@@ -25,7 +25,7 @@ const AddEmployee = () => {
       return;
     }
     try {
-      await axios.post('http://localhost:5000/api/employees', formData);
+      await axios.post('https://hr-dashboard-using-mern.onrender.com/api/employees', formData);
       navigate('/');
     } catch (err) {
       setError(err.response?.data?.message || "Error adding employee");

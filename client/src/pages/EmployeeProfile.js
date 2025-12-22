@@ -14,7 +14,7 @@ const EmployeeProfile = () => {
 
   const fetchDetails = async (id) => {
     try {
-      const res = await axios.get('http://localhost:5000/api/employees');
+      const res = await axios.get('https://hr-dashboard-using-mern.onrender.com/api/employees');
       const myData = res.data.find(e => e._id === id);
       setEmployee(myData);
     } catch (err) {

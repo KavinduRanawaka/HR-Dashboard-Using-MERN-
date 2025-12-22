@@ -123,8 +123,8 @@ const SeeEmployee = () => {
   const handleSearch = async () => {
     try {
       const [empRes, holRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/employees'),
-        axios.get('http://localhost:5000/api/holidays')
+        axios.get('https://hr-dashboard-using-mern.onrender.com/api/employees'),
+        axios.get('https://hr-dashboard-using-mern.onrender.com/api/holidays')
       ]);
 
       const filtered = empRes.data.filter(emp => 
@@ -145,7 +145,7 @@ const SeeEmployee = () => {
 
   const requestLeave = async (id, type) => {
     try {
-      await axios.post(`http://localhost:5000/api/employees/${id}/leave`, { type });
+      await axios.post(`https://hr-dashboard-using-mern.onrender.com/api/employees/${id}/leave`, { type });
       setAlert({ msg: `${type} Leave Added Successfully`, type: 'success' });
       handleSearch(); 
     } catch (error) {
@@ -159,7 +159,7 @@ const SeeEmployee = () => {
     if(!window.confirm("Are you sure you want to remove this attendance record?")) return;
     try {
       // Axios DELETE with Body requires specific syntax: { data: { ... } }
-      await axios.delete(`http://localhost:5000/api/employees/${empId}/attendance`, {
+      await axios.delete(`https://hr-dashboard-using-mern.onrender.com/api/employees/${empId}/attendance`, {
         data: { date: date }
       });
       setAlert({ msg: "Attendance Removed", type: 'warning' });
@@ -170,7 +170,7 @@ const SeeEmployee = () => {
   const handleDeleteLeave = async (empId, type, date) => {
     if(!window.confirm(`Remove this ${type} leave record?`)) return;
     try {
-      await axios.delete(`http://localhost:5000/api/employees/${empId}/leave`, {
+      await axios.delete(`https://hr-dashboard-using-mern.onrender.com/api/employees/${empId}/leave`, {
         data: { type, date }
       });
       setAlert({ msg: "Leave Removed", type: 'warning' });

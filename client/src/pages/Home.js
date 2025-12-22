@@ -95,8 +95,8 @@ const Home = () => {
   const fetchData = async () => {
     try {
       const [empRes, holRes] = await Promise.all([
-        axios.get('http://localhost:5000/api/employees'),
-        axios.get('http://localhost:5000/api/holidays')
+        axios.get('https://hr-dashboard-using-mern.onrender.com/api/employees'),
+        axios.get('https://hr-dashboard-using-mern.onrender.com/api/holidays')
       ]);
       setEmployees(empRes.data);
       setHolidays(holRes.data);
@@ -174,7 +174,7 @@ const Home = () => {
 
   const markAttendance = async (id) => {
     try {
-      await axios.post(`http://localhost:5000/api/employees/${id}/attendance`);
+      await axios.post(`https://hr-dashboard-using-mern.onrender.com/api/employees/${id}/attendance`);
       showAlert('Attendance Marked!', 'success');
       fetchData();
     } catch (error) { if (error.response) showAlert(error.response.data.message, 'danger'); }
@@ -182,7 +182,7 @@ const Home = () => {
 
   const requestLeave = async (id, type) => {
     try {
-      await axios.post(`http://localhost:5000/api/employees/${id}/leave`, { type });
+      await axios.post(`https://hr-dashboard-using-mern.onrender.com/api/employees/${id}/leave`, { type });
       showAlert(`${type} leave added`, 'success');
       fetchData();
     } catch (error) { if (error.response) showAlert(error.response.data.message, 'danger'); }
@@ -191,7 +191,7 @@ const Home = () => {
   const handleDeleteAttendance = async (empId, date) => {
     if(!window.confirm("Remove attendance?")) return;
     try {
-      await axios.delete(`http://localhost:5000/api/employees/${empId}/attendance`, { data: { date } });
+      await axios.delete(`https://hr-dashboard-using-mern.onrender.com/api/employees/${empId}/attendance`, { data: { date } });
       setExpandedRow(null); 
       fetchData();
     } catch (err) { console.error(err); }
@@ -200,7 +200,7 @@ const Home = () => {
   const handleDeleteLeave = async (empId, type, date) => {
     if(!window.confirm(`Remove ${type} leave?`)) return;
     try {
-      await axios.delete(`http://localhost:5000/api/employees/${empId}/leave`, { data: { type, date } });
+      await axios.delete(`https://hr-dashboard-using-mern.onrender.com/api/employees/${empId}/leave`, { data: { type, date } });
       setExpandedRow(null); 
       fetchData();
     } catch (err) { console.error(err); }
@@ -208,7 +208,7 @@ const Home = () => {
 
   const handleDeleteEmployee = async (id) => {
     if(window.confirm("Delete Employee permanently?")) {
-      await axios.delete(`http://localhost:5000/api/employees/${id}`);
+      await axios.delete(`https://hr-dashboard-using-mern.onrender.com/api/employees/${id}`);
       fetchData();
     }
   };

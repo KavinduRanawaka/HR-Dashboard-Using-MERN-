@@ -15,7 +15,7 @@ const Login = ({ setIsLoggedIn }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      const res = await axios.post('http://localhost:5000/api/login', formData);
+      const res = await axios.post('https://hr-dashboard-using-mern.onrender.com/api/login', formData);
       
       const { role, id } = res.data;
 

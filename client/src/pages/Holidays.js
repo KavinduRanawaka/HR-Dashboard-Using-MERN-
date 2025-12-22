@@ -12,7 +12,7 @@ const Holidays = () => {
 
   const fetchHolidays = async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/holidays');
+      const res = await axios.get('https://hr-dashboard-using-mern.onrender.com/api/holidays');
       setHolidays(res.data);
     } catch (err) {
       console.error(err);
@@ -22,7 +22,7 @@ const Holidays = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      await axios.post('http://localhost:5000/api/holidays', formData);
+      await axios.post('https://hr-dashboard-using-mern.onrender.com/api/holidays', formData);
       setFormData({ date: '', name: '' }); // Reset Form
       setError('');
       fetchHolidays(); // Refresh List
@@ -33,7 +33,7 @@ const Holidays = () => {
 
   const handleDelete = async (id) => {
     if(window.confirm("Remove this holiday?")) {
-      await axios.delete(`http://localhost:5000/api/holidays/${id}`);
+      await axios.delete(`https://hr-dashboard-using-mern.onrender.com/api/holidays/${id}`);
       fetchHolidays();
     }
   };
