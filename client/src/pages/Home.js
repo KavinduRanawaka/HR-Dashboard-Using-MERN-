@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable'; // Fixed Import
 
-// --- SUB-COMPONENTS (AttendanceHistory & LeaveHistory) ---
-// ... (These remain exactly the same as before) ...
-
+// --- SUB-COMPONENT: ATTENDANCE HISTORY ---
 const AttendanceHistory = ({ attendanceRecords, onDelete }) => {
   const [openMonth, setOpenMonth] = useState(null);
   const getGroupedData = () => {
@@ -54,6 +54,7 @@ const AttendanceHistory = ({ attendanceRecords, onDelete }) => {
   );
 };
 
+// --- SUB-COMPONENT: LEAVE HISTORY ---
 const LeaveHistory = ({ filteredMedical, filteredAuthorized, onDelete }) => {
   const medicals = filteredMedical.map(date => ({ date: new Date(date), type: 'medical' }));
   const authorized = filteredAuthorized.map(date => ({ date: new Date(date), type: 'authorized' }));
@@ -83,10 +84,13 @@ const LeaveHistory = ({ filteredMedical, filteredAuthorized, onDelete }) => {
 
 // --- MAIN COMPONENT ---
 const Home = () => {
-  const [employees, setEmployees] = useState([]);
+  const [employees, setEmployees] = useState([]); 
   const [holidays, setHolidays] = useState([]);
   const [expandedRow, setExpandedRow] = useState(null); 
   const [alert, setAlert] = useState(null);
+  
+  // PDF State (Default to current YYYY-MM)
+  const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0, 7)); 
 
   useEffect(() => {
     fetchData();
@@ -98,11 +102,99 @@ const Home = () => {
         axios.get('https://hr-dashboard-using-mern.onrender.com/api/employees'),
         axios.get('https://hr-dashboard-using-mern.onrender.com/api/holidays')
       ]);
-      setEmployees(empRes.data);
-      setHolidays(holRes.data);
-    } catch (err) { console.error(err); }
+      // Ensure we are setting arrays to prevent crashes
+      setEmployees(Array.isArray(empRes.data) ? empRes.data : []);
+      setHolidays(Array.isArray(holRes.data) ? holRes.data : []);
+    } catch (err) { 
+      console.error(err);
+      showAlert("Error loading data from server.", "danger");
+    }
   };
 
+  // --- PDF GENERATION LOGIC (FIXED) ---
+  const generatePDF = () => {
+    if (employees.length === 0) {
+      showAlert("No employees to generate report.", "warning");
+      return;
+    }
+
+    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape Mode
+    const [year, month] = reportDate.split('-');
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
+
+    // 1. Title
+    doc.text(`Attendance Report: ${monthName} ${year}`, 14, 15);
+
+    // 2. Build Table Columns (Name + 1..31)
+    const tableHead = ['Name'];
+    for (let i = 1; i <= daysInMonth; i++) {
+      tableHead.push(i.toString());
+    }
+
+    // 3. Build Table Body
+    const tableBody = employees.map(emp => {
+      const row = [emp.name];
+      
+      for (let day = 1; day <= daysInMonth; day++) {
+        const currentDateStr = `${year}-${month}-${String(day).padStart(2, '0')}`;
+        const currentDateObj = new Date(currentDateStr);
+        const currentDateString = currentDateObj.toDateString();
+
+        // CHECK STATUS
+        let status = '';
+        
+        // Is it a Holiday?
+        const isHoliday = holidays.some(h => new Date(h.date).toDateString() === currentDateString);
+        
+        // Is Present?
+        const isPresent = emp.attendance.some(d => new Date(d).toDateString() === currentDateString);
+
+        // Is Leave?
+        const isMed = emp.leaves.medical && emp.leaves.medical.some(d => new Date(d).toDateString() === currentDateString);
+        const isAuth = emp.leaves.authorized && emp.leaves.authorized.some(d => new Date(d).toDateString() === currentDateString);
+        
+        if (isHoliday) status = 'H';
+        else if (isPresent) status = 'P';
+        else if (isMed || isAuth) status = 'L';
+        else status = '-'; 
+
+        row.push(status);
+      }
+      return row;
+    });
+
+    // 4. Generate Table with Colors (Using autoTable function directly)
+    autoTable(doc, {
+      head: [tableHead],
+      body: tableBody,
+      startY: 20,
+      theme: 'grid',
+      styles: { fontSize: 8, cellPadding: 1, halign: 'center' },
+      headStyles: { fillColor: [22, 160, 133] }, 
+      
+      // CUSTOM CELL COLORING
+      didParseCell: function(data) {
+        if (data.section === 'body' && data.column.index > 0) {
+          const text = data.cell.raw;
+          if (text === 'P') {
+            data.cell.styles.fillColor = [46, 204, 113]; // Green (Present)
+            data.cell.styles.textColor = [255, 255, 255];
+          } else if (text === 'L') {
+            data.cell.styles.fillColor = [231, 76, 60];  // Red (Leave)
+            data.cell.styles.textColor = [255, 255, 255];
+          } else if (text === 'H') {
+            data.cell.styles.fillColor = [241, 196, 15]; // Yellow (Holiday)
+            data.cell.styles.textColor = [0, 0, 0];
+          }
+        }
+      }
+    });
+
+    doc.save(`Attendance_${monthName}_${year}.pdf`);
+  };
+
+  // --- HELPERS ---
   const isDateHoliday = (dateStr) => {
     const targetDate = new Date(dateStr).toDateString();
     return holidays.some(h => new Date(h.date).toDateString() === targetDate);
@@ -161,7 +253,6 @@ const Home = () => {
       isExpired = today > endDate;
       extraDays = penaltyDaysInt; 
     }
-
     return { isExpired, extraDays, endDate, currentMonthMedical };
   };
 
@@ -172,6 +263,7 @@ const Home = () => {
     return lastDate.toDateString() === today.toDateString();
   };
 
+  // --- ACTIONS ---
   const markAttendance = async (id) => {
     try {
       await axios.post(`https://hr-dashboard-using-mern.onrender.com/api/employees/${id}/attendance`);
@@ -222,7 +314,8 @@ const Home = () => {
     setExpandedRow(expandedRow === id ? null : id);
   };
 
-  const sortedEmployees = [...employees].sort((a, b) => {
+  // Safe sort with default empty array check
+  const sortedEmployees = (employees || []).sort((a, b) => {
     const statA = calculateEmployeeStatus(a);
     const statB = calculateEmployeeStatus(b);
     if (statA.isExpired && !statB.isExpired) return -1;
@@ -234,113 +327,137 @@ const Home = () => {
     <div className="container mt-4">
       {alert && <div className={`alert alert-${alert.type} fixed-top m-3`}>{alert.msg}</div>}
       
-      <div className="d-flex justify-content-between align-items-center mb-3">
+      {/* HEADER: Title + PDF Controls */}
+      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap">
         <h2>Employee Dashboard</h2>
+        
+        <div className="d-flex align-items-center gap-2">
+            <input 
+              type="month" 
+              className="form-control" 
+              value={reportDate} 
+              onChange={(e) => setReportDate(e.target.value)}
+              style={{ maxWidth: '180px' }}
+            />
+            <button className="btn btn-dark" onClick={generatePDF}>
+              Download Report
+            </button>
+            <Link to="/add-employee" className="btn btn-primary">Add New Employee</Link>
+        </div>
       </div>
 
-      <table className="table table-bordered table-hover shadow-sm">
-        <thead className="table-dark">
-          <tr>
-            <th>Name</th>
-            <th>Status / Type</th>
-            <th>Position</th>
-            <th>Current Month Leaves (Valid)</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {sortedEmployees.map((emp) => {
-            const { isExpired, extraDays, endDate, currentMonthMedical } = calculateEmployeeStatus(emp);
-            const markedToday = isPresentToday(emp);
-            
-            const rawMedical = Array.isArray(emp.leaves.medical) ? emp.leaves.medical : [];
-            const rawAuthorized = Array.isArray(emp.leaves.authorized) ? emp.leaves.authorized : [];
-            
-            const filteredMedical = rawMedical.filter(d => !isDateHoliday(d));
-            const filteredAuthorized = rawAuthorized.filter(d => !isDateHoliday(d));
-            const authCount = calculateWeightedCount(rawAuthorized);
+      <div className="table-responsive">
+        <table className="table table-bordered table-hover shadow-sm">
+          <thead className="table-dark">
+            <tr>
+              <th>Name</th>
+              <th>Status / Type</th>
+              <th>Position</th>
+              <th>Current Month Leaves (Valid)</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sortedEmployees.length > 0 ? sortedEmployees.map((emp) => {
+              const { isExpired, extraDays, endDate, currentMonthMedical } = calculateEmployeeStatus(emp);
+              const markedToday = isPresentToday(emp);
+              
+              const rawMedical = Array.isArray(emp.leaves.medical) ? emp.leaves.medical : [];
+              const rawAuthorized = Array.isArray(emp.leaves.authorized) ? emp.leaves.authorized : [];
+              
+              const filteredMedical = rawMedical.filter(d => !isDateHoliday(d));
+              const filteredAuthorized = rawAuthorized.filter(d => !isDateHoliday(d));
+              const authCount = calculateWeightedCount(rawAuthorized);
 
-            return (
-              <React.Fragment key={emp._id}>
-                <tr className={isExpired ? "table-danger border-danger" : ""}>
-                  <td>
-                    <strong>{emp.name}</strong>
-                    {isExpired && <div className="text-danger fw-bold small mt-1">⚠️ PERIOD COMPLETED</div>}
-                  </td>
-                  <td>
-                    {emp.category === 'Permanent' ? (
-                      <span className="badge bg-secondary">Permanent</span>
-                    ) : (
-                      <div className="d-flex flex-column align-items-start">
-                        <span className={`badge ${isExpired ? 'bg-danger' : 'bg-info text-dark'}`}>
-                          Trainee ({emp.traineePeriod})
-                        </span>
-                        {extraDays > 0 && <small className="text-danger fw-bold mt-1">+ {extraDays} Days Extended</small>}
-                        {endDate && <small className="text-muted" style={{fontSize: '0.75rem'}}>Ends: {endDate.toLocaleDateString()}</small>}
-                      </div>
-                    )}
-                  </td>
-                  <td>{emp.position}</td>
-                  <td>
-                    <span className={`badge ${currentMonthMedical > 1 ? 'bg-warning text-dark' : (currentMonthMedical >= 1 ? 'bg-danger' : 'bg-secondary')} me-1`}>
-                      Med: {currentMonthMedical}
-                    </span>
-                    <span className={`badge ${authCount >= 1 ? 'bg-danger' : 'bg-secondary'}`}>
-                      Auth: {authCount}/1
-                    </span>
-                  </td>
-                  <td>
-                    {/* d-flex aligns them in a row, gap-2 adds small consistent space between them */}
-                    <div className="d-flex gap-2 justify-content-start">
-                      
-                      <button 
-                        className={`btn btn-sm ${markedToday ? 'btn-secondary' : 'btn-success'}`} 
-                        onClick={() => markAttendance(emp._id)}
-                        disabled={markedToday}
-                      >
-                        {markedToday ? "Done" : "Present"} 
-                      </button>
-
-                      <button className="btn btn-sm btn-warning" onClick={() => requestLeave(emp._id, 'medical')}>+Med</button>
-                      <button className="btn btn-sm btn-info" onClick={() => requestLeave(emp._id, 'authorized')}>+Auth</button>
-                      
-                      <Link to={`/edit-employee/${emp._id}`} className="btn btn-sm btn-secondary">Edit</Link>
-                      <button className="btn btn-sm btn-danger" onClick={() => handleDeleteEmployee(emp._id)}>Delete</button>
-
-                      <button className="btn btn-sm btn-outline-dark" onClick={() => toggleRow(emp._id)}>
-                        {expandedRow === emp._id ? "Close" : "Revise"}
-                      </button>
-
-                    </div>
-                  </td>
-                </tr>
-
-                {expandedRow === emp._id && (
-                  <tr className="bg-light">
-                    <td colSpan="5">
-                      <div className="row p-3">
-                        <div className="col-md-6">
-                           <AttendanceHistory 
-                             attendanceRecords={emp.attendance} 
-                             onDelete={(date) => handleDeleteAttendance(emp._id, date)} 
-                           />
+              return (
+                <React.Fragment key={emp._id}>
+                  <tr className={isExpired ? "table-danger border-danger" : ""}>
+                    <td>
+                      <strong>{emp.name}</strong>
+                      {isExpired && <div className="text-danger fw-bold small mt-1">⚠️ PERIOD COMPLETED</div>}
+                    </td>
+                    <td>
+                      {emp.category === 'Permanent' ? (
+                        <span className="badge bg-secondary">Permanent</span>
+                      ) : (
+                        <div className="d-flex flex-column align-items-start">
+                          <span className={`badge ${isExpired ? 'bg-danger' : 'bg-info text-dark'}`}>
+                            Trainee ({emp.traineePeriod})
+                          </span>
+                          {extraDays > 0 && <small className="text-danger fw-bold mt-1">+ {extraDays} Days Extended</small>}
+                          {endDate && <small className="text-muted" style={{fontSize: '0.75rem'}}>Ends: {endDate.toLocaleDateString()}</small>}
                         </div>
-                        <div className="col-md-6">
-                           <LeaveHistory 
-                             filteredMedical={filteredMedical} 
-                             filteredAuthorized={filteredAuthorized}
-                             onDelete={(type, date) => handleDeleteLeave(emp._id, type, date)}
-                           />
-                        </div>
+                      )}
+                    </td>
+                    <td>{emp.position}</td>
+                    <td>
+                      <span className={`badge ${currentMonthMedical > 1 ? 'bg-warning text-dark' : (currentMonthMedical >= 1 ? 'bg-danger' : 'bg-secondary')} me-1`}>
+                        Med: {currentMonthMedical}
+                      </span>
+                      <span className={`badge ${authCount >= 1 ? 'bg-danger' : 'bg-secondary'}`}>
+                        Auth: {authCount}/1
+                      </span>
+                    </td>
+                    <td>
+                      {/* FIXED BUTTON ALIGNMENT */}
+                      <div className="d-flex gap-2 justify-content-start">
+                        
+                        <button 
+                          className={`btn btn-sm ${markedToday ? 'btn-secondary' : 'btn-success'}`} 
+                          onClick={() => markAttendance(emp._id)}
+                          disabled={markedToday}
+                        >
+                          {markedToday ? "Done" : "Present"} 
+                        </button>
+
+                        <button className="btn btn-sm btn-warning" onClick={() => requestLeave(emp._id, 'medical')}>+Med</button>
+                        <button className="btn btn-sm btn-info" onClick={() => requestLeave(emp._id, 'authorized')}>+Auth</button>
+                        
+                        <button className="btn btn-sm btn-outline-dark" onClick={() => toggleRow(emp._id)}>
+                          {expandedRow === emp._id ? "Close" : "Revise"}
+                        </button>
+
+                        <Link to={`/edit-employee/${emp._id}`} className="btn btn-sm btn-secondary">Edit</Link>
+                        <button className="btn btn-sm btn-danger" onClick={() => handleDeleteEmployee(emp._id)}>Delete</button>
+
                       </div>
                     </td>
                   </tr>
-                )}
-              </React.Fragment>
-            );
-          })}
-        </tbody>
-      </table>
+
+                  {expandedRow === emp._id && (
+                    <tr className="bg-light">
+                      <td colSpan="5">
+                        <div className="row p-3">
+                          <div className="col-md-6">
+                             <AttendanceHistory 
+                               attendanceRecords={emp.attendance} 
+                               onDelete={(date) => handleDeleteAttendance(emp._id, date)} 
+                             />
+                          </div>
+                          <div className="col-md-6">
+                             <LeaveHistory 
+                               filteredMedical={filteredMedical} 
+                               filteredAuthorized={filteredAuthorized}
+                               onDelete={(type, date) => handleDeleteLeave(emp._id, type, date)}
+                             />
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            }) : (
+               <tr>
+                 <td colSpan="5" className="text-center p-3 text-muted">
+                   {/* If API is failing, this message will help debug */}
+                   No employees found or loading...
+                 </td>
+               </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 };

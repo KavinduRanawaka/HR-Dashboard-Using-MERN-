@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 
-const Navbar = ({ handleLogout }) => {
+const Navbar = () => {
   return (
     <nav className="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
       <div className="container">
@@ -14,7 +14,6 @@ const Navbar = ({ handleLogout }) => {
         <div className="collapse navbar-collapse" id="navbarNav">
           <ul className="navbar-nav ms-auto align-items-center">
             
-            {/* HOME BUTTON (Added mx-2 for margin) */}
             <li className="nav-item">
               <Link className="nav-link mx-2" to="/">Home</Link>
             </li>
@@ -31,11 +30,7 @@ const Navbar = ({ handleLogout }) => {
               <Link className="btn btn-primary ms-3 btn-sm" to="/add-employee">Add Employee</Link>
             </li>
             
-            <li className="nav-item ms-3">
-              <button className="btn btn-outline-danger btn-sm" onClick={handleLogout}>
-                Logout
-              </button>
-            </li>
+            {/* Logout button removed */}
 
           </ul>
         </div>
