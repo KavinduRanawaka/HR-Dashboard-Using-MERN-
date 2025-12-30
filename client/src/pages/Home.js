@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import jsPDF from 'jspdf';
-import autoTable from 'jspdf-autotable'; // Fixed Import
+import autoTable from 'jspdf-autotable'; 
 
 // --- SUB-COMPONENT: ATTENDANCE HISTORY ---
 const AttendanceHistory = ({ attendanceRecords, onDelete }) => {
@@ -89,8 +89,10 @@ const Home = () => {
   const [expandedRow, setExpandedRow] = useState(null); 
   const [alert, setAlert] = useState(null);
   
-  // PDF State (Default to current YYYY-MM)
-  const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0, 7)); 
+  // DATE STATES
+  const [reportDate, setReportDate] = useState(new Date().toISOString().slice(0, 7)); // For PDF
+  // NEW: Tracks the date you are currently working on (Default: Today)
+  const [actionDate, setActionDate] = useState(new Date().toISOString().split('T')[0]); 
 
   useEffect(() => {
     fetchData();
@@ -102,7 +104,6 @@ const Home = () => {
         axios.get('https://hr-dashboard-using-mern.onrender.com/api/employees'),
         axios.get('https://hr-dashboard-using-mern.onrender.com/api/holidays')
       ]);
-      // Ensure we are setting arrays to prevent crashes
       setEmployees(Array.isArray(empRes.data) ? empRes.data : []);
       setHolidays(Array.isArray(holRes.data) ? holRes.data : []);
     } catch (err) { 
@@ -111,46 +112,34 @@ const Home = () => {
     }
   };
 
-  // --- PDF GENERATION LOGIC (FIXED) ---
+  // --- PDF GENERATION LOGIC ---
   const generatePDF = () => {
     if (employees.length === 0) {
       showAlert("No employees to generate report.", "warning");
       return;
     }
 
-    const doc = new jsPDF('l', 'mm', 'a4'); // Landscape Mode
+    const doc = new jsPDF('l', 'mm', 'a4'); 
     const [year, month] = reportDate.split('-');
     const daysInMonth = new Date(year, month, 0).getDate();
     const monthName = new Date(year, month - 1).toLocaleString('default', { month: 'long' });
 
-    // 1. Title
     doc.text(`Attendance Report: ${monthName} ${year}`, 14, 15);
 
-    // 2. Build Table Columns (Name + 1..31)
     const tableHead = ['Name'];
     for (let i = 1; i <= daysInMonth; i++) {
       tableHead.push(i.toString());
     }
 
-    // 3. Build Table Body
     const tableBody = employees.map(emp => {
       const row = [emp.name];
-      
       for (let day = 1; day <= daysInMonth; day++) {
         const currentDateStr = `${year}-${month}-${String(day).padStart(2, '0')}`;
-        const currentDateObj = new Date(currentDateStr);
-        const currentDateString = currentDateObj.toDateString();
+        const currentDateString = new Date(currentDateStr).toDateString();
 
-        // CHECK STATUS
         let status = '';
-        
-        // Is it a Holiday?
         const isHoliday = holidays.some(h => new Date(h.date).toDateString() === currentDateString);
-        
-        // Is Present?
         const isPresent = emp.attendance.some(d => new Date(d).toDateString() === currentDateString);
-
-        // Is Leave?
         const isMed = emp.leaves.medical && emp.leaves.medical.some(d => new Date(d).toDateString() === currentDateString);
         const isAuth = emp.leaves.authorized && emp.leaves.authorized.some(d => new Date(d).toDateString() === currentDateString);
         
@@ -164,7 +153,6 @@ const Home = () => {
       return row;
     });
 
-    // 4. Generate Table with Colors (Using autoTable function directly)
     autoTable(doc, {
       head: [tableHead],
       body: tableBody,
@@ -172,19 +160,17 @@ const Home = () => {
       theme: 'grid',
       styles: { fontSize: 8, cellPadding: 1, halign: 'center' },
       headStyles: { fillColor: [22, 160, 133] }, 
-      
-      // CUSTOM CELL COLORING
       didParseCell: function(data) {
         if (data.section === 'body' && data.column.index > 0) {
           const text = data.cell.raw;
           if (text === 'P') {
-            data.cell.styles.fillColor = [46, 204, 113]; // Green (Present)
+            data.cell.styles.fillColor = [46, 204, 113]; 
             data.cell.styles.textColor = [255, 255, 255];
           } else if (text === 'L') {
-            data.cell.styles.fillColor = [231, 76, 60];  // Red (Leave)
+            data.cell.styles.fillColor = [231, 76, 60];  
             data.cell.styles.textColor = [255, 255, 255];
           } else if (text === 'H') {
-            data.cell.styles.fillColor = [241, 196, 15]; // Yellow (Holiday)
+            data.cell.styles.fillColor = [241, 196, 15]; 
             data.cell.styles.textColor = [0, 0, 0];
           }
         }
@@ -256,26 +242,28 @@ const Home = () => {
     return { isExpired, extraDays, endDate, currentMonthMedical };
   };
 
-  const isPresentToday = (emp) => {
-    if (emp.attendance.length === 0) return false;
-    const lastDate = new Date(emp.attendance[emp.attendance.length - 1]);
-    const today = new Date();
-    return lastDate.toDateString() === today.toDateString();
+  // --- NEW: Check if marked for SELECTED date (instead of just today) ---
+  const isMarkedForSelectedDate = (emp) => {
+    if (!emp.attendance || emp.attendance.length === 0) return false;
+    const target = new Date(actionDate).toDateString();
+    return emp.attendance.some(d => new Date(d).toDateString() === target);
   };
 
   // --- ACTIONS ---
   const markAttendance = async (id) => {
     try {
-      await axios.post(`https://hr-dashboard-using-mern.onrender.com/api/employees/${id}/attendance`);
-      showAlert('Attendance Marked!', 'success');
+      // Send actionDate to backend
+      await axios.post(`https://hr-dashboard-using-mern.onrender.com/api/employees/${id}/attendance`, { date: actionDate });
+      showAlert(`Attendance Marked for ${actionDate}!`, 'success');
       fetchData();
     } catch (error) { if (error.response) showAlert(error.response.data.message, 'danger'); }
   };
 
   const requestLeave = async (id, type) => {
     try {
-      await axios.post(`https://hr-dashboard-using-mern.onrender.com/api/employees/${id}/leave`, { type });
-      showAlert(`${type} leave added`, 'success');
+      // Send actionDate to backend
+      await axios.post(`https://hr-dashboard-using-mern.onrender.com/api/employees/${id}/leave`, { type, date: actionDate });
+      showAlert(`${type} leave added for ${actionDate}`, 'success');
       fetchData();
     } catch (error) { if (error.response) showAlert(error.response.data.message, 'danger'); }
   };
@@ -314,7 +302,6 @@ const Home = () => {
     setExpandedRow(expandedRow === id ? null : id);
   };
 
-  // Safe sort with default empty array check
   const sortedEmployees = (employees || []).sort((a, b) => {
     const statA = calculateEmployeeStatus(a);
     const statB = calculateEmployeeStatus(b);
@@ -327,22 +314,44 @@ const Home = () => {
     <div className="container mt-4">
       {alert && <div className={`alert alert-${alert.type} fixed-top m-3`}>{alert.msg}</div>}
       
-      {/* HEADER: Title + PDF Controls */}
-      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap">
+      {/* HEADER: Title + Controls */}
+      <div className="d-flex justify-content-between align-items-end mb-3 flex-wrap">
         <h2>Employee Dashboard</h2>
         
-        <div className="d-flex align-items-center gap-2">
-            <input 
-              type="month" 
-              className="form-control" 
-              value={reportDate} 
-              onChange={(e) => setReportDate(e.target.value)}
-              style={{ maxWidth: '180px' }}
-            />
-            <button className="btn btn-dark" onClick={generatePDF}>
-              Download Report
-            </button>
-            <Link to="/add-employee" className="btn btn-primary">Add New Employee</Link>
+        <div className="d-flex align-items-end gap-2 flex-wrap">
+            
+            {/* WORK DATE SELECTOR (For Past/Future Actions) */}
+            <div className="bg-light p-2 border rounded">
+              <label className="small fw-bold text-muted d-block">Work Date (Actions)</label>
+              <input 
+                type="date" 
+                className="form-control form-control-sm fw-bold text-primary" 
+                value={actionDate} 
+                onChange={(e) => setActionDate(e.target.value)}
+              />
+            </div>
+
+            {/* PDF Report Selector */}
+            <div className="bg-light p-2 border rounded">
+              <label className="small fw-bold text-muted d-block">Report Month</label>
+              <div className="d-flex gap-1">
+                <input 
+                  type="month" 
+                  className="form-control form-control-sm" 
+                  value={reportDate} 
+                  onChange={(e) => setReportDate(e.target.value)}
+                  style={{ maxWidth: '140px' }}
+                />
+                <button className="btn btn-dark btn-sm" onClick={generatePDF}>
+                  PDF
+                </button>
+              </div>
+            </div>
+
+            {/* Add Employee Button */}
+            <Link to="/add-employee" className="btn btn-primary btn-sm mb-1" style={{height: '38px', lineHeight: '24px'}}>
+              + Add Employee
+            </Link>
         </div>
       </div>
 
@@ -353,14 +362,17 @@ const Home = () => {
               <th>Name</th>
               <th>Status / Type</th>
               <th>Position</th>
-              <th>Current Month Leaves (Valid)</th>
-              <th>Actions</th>
+              <th>Leaves (Valid)</th>
+              {/* Dynamic Header showing selected date */}
+              <th style={{minWidth: '280px'}}>Actions for: <span className="text-warning">{actionDate}</span></th>
             </tr>
           </thead>
           <tbody>
             {sortedEmployees.length > 0 ? sortedEmployees.map((emp) => {
               const { isExpired, extraDays, endDate, currentMonthMedical } = calculateEmployeeStatus(emp);
-              const markedToday = isPresentToday(emp);
+              
+              // Check if action already taken on Selected Date
+              const isMarked = isMarkedForSelectedDate(emp);
               
               const rawMedical = Array.isArray(emp.leaves.medical) ? emp.leaves.medical : [];
               const rawAuthorized = Array.isArray(emp.leaves.authorized) ? emp.leaves.authorized : [];
@@ -374,7 +386,7 @@ const Home = () => {
                   <tr className={isExpired ? "table-danger border-danger" : ""}>
                     <td>
                       <strong>{emp.name}</strong>
-                      {isExpired && <div className="text-danger fw-bold small mt-1">⚠️ PERIOD COMPLETED</div>}
+                      {isExpired && <div className="text-danger fw-bold small mt-1">⚠️ ENDED</div>}
                     </td>
                     <td>
                       {emp.category === 'Permanent' ? (
@@ -399,15 +411,15 @@ const Home = () => {
                       </span>
                     </td>
                     <td>
-                      {/* FIXED BUTTON ALIGNMENT */}
                       <div className="d-flex gap-2 justify-content-start">
                         
+                        {/* ATTENDANCE BUTTON (Uses Action Date) */}
                         <button 
-                          className={`btn btn-sm ${markedToday ? 'btn-secondary' : 'btn-success'}`} 
+                          className={`btn btn-sm ${isMarked ? 'btn-secondary' : 'btn-success'}`} 
                           onClick={() => markAttendance(emp._id)}
-                          disabled={markedToday}
+                          disabled={isMarked}
                         >
-                          {markedToday ? "Done" : "Present"} 
+                          {isMarked ? "Done" : "Present"} 
                         </button>
 
                         <button className="btn btn-sm btn-warning" onClick={() => requestLeave(emp._id, 'medical')}>+Med</button>
@@ -418,7 +430,7 @@ const Home = () => {
                         </button>
 
                         <Link to={`/edit-employee/${emp._id}`} className="btn btn-sm btn-secondary">Edit</Link>
-                        <button className="btn btn-sm btn-danger" onClick={() => handleDeleteEmployee(emp._id)}>Delete</button>
+                        <button className="btn btn-sm btn-danger" onClick={() => handleDeleteEmployee(emp._id)}>Del</button>
 
                       </div>
                     </td>
@@ -450,7 +462,6 @@ const Home = () => {
             }) : (
                <tr>
                  <td colSpan="5" className="text-center p-3 text-muted">
-                   {/* If API is failing, this message will help debug */}
                    No employees found or loading...
                  </td>
                </tr>
