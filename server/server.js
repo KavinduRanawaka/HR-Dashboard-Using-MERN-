@@ -276,9 +276,7 @@ cron.schedule('0 0 1 * *', async () => {
 });
 
 
-// ==========================================
-//  START SERVER (VERCEL COMPATIBLE)
-// ==========================================
+
 const PORT = process.env.PORT || 5000;
 
 if (process.env.NODE_ENV !== 'production') {

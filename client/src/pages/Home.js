@@ -249,7 +249,7 @@ const Home = () => {
     return emp.attendance.some(d => new Date(d).toDateString() === target);
   };
 
-  // --- ACTIONS ---
+  // --- ACTIONS --
   const markAttendance = async (id) => {
     try {
       // Send actionDate to backend
